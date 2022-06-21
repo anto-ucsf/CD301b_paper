@@ -1,0 +1,194 @@
+---
+title: "AW75_Skin_Citeseq"
+author: "Antonin Weckel"
+date: "6/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r packages needed}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(svglite)
+library(ggplot2)
+library(data.table)
+```
+
+
+```{r}
+##Accession number : 
+##Skin.Citeseq.rds is the end product, Skin.Citesq.data.rds is the raw seurat object
+
+## raw files matrices: "Skin_SE_barcodes.tsv.gz" "Skin_SE_features.tsv.gz" "Skin_SE_matrix.mtx.gz"
+
+
+##Skin_Citeseq.data <- Read10X(data.dir = "FILE LOCATION")
+
+##this is skin for D10 neonatal mouse. Three sorted population were pooled together and hashtagged, with also cite-seq. Uncolonized (CT-subpop), colonized but cells without bacteria (SEneg) and colonized cells loaded with bacterial antigen (SEpos). not difference were observed between SEneg and CTpop. so the pipeline focus on removing the SEpos populations, and getting only singlets. All results were confirmed with another dataset containing only cells from control mice.
+
+##Citeseq contains EpCAM-ADT, CD11B-ADT, CD103-ADT, PDL-1-ADT, CD86-ADT, CD301B-ADT
+
+
+rna.counts<-Skin_Citeseq.data$`Gene Expression`
+Skin_Citeseq.data<- CreateSeuratObject(counts =Skin_Citeseq.data$`Gene Expression`, project = "Skin_Citeseq",assay="RNA", min.cells = 3, min.features = 200)
+
+##alternatively, load the rds object directly
+## Skin_Citeseq.data<-readRDS ("YOUR LOCATION")
+
+Skin_Citeseq<-Skin_Citeseq.data
+Skin_Citeseq[["percent.mt"]] <- PercentageFeatureSet(Skin_Citeseq.data, pattern = "^mt-")
+
+##QC paramters were determined by looking at features, percent.met distribution etc...
+Skin_Citeseq<- subset(Skin_Citeseq, subset = nFeature_RNA > 200 & nFeature_RNA < 5500 & percent.mt < 6)
+
+adt.counts<- Skin_Citeseq.data$`Antibody Capture`@Dimnames[[1]][1:6]
+adt.count<-Skin_Citeseq.data$`Antibody Capture`[adt.counts,]
+hto.counts<-Skin_Citeseq.data$`Antibody Capture`@Dimnames[[1]][7:9]
+hto.count<-Skin_Citeseq.data$`Antibody Capture`[hto.counts,]
+all.cells <- Reduce(intersect, list(colnames(Skin_Citeseq), colnames(adt.count), colnames(hto.count)))
+                    
+Skin_Citeseq <- subset(Skin_Citeseq, cells = all.cells )
+
+Skin_Citeseq.hashtag <-CreateSeuratObject(hto.count[, colnames(x = Skin_Citeseq)])
+Skin_Citeseq.hashtag<- subset(Skin_Citeseq.hashtag, cells=all.cells)
+Skin_Citeseq[["ADT"]]<- CreateAssayObject(adt.count[, colnames(x = Skin_Citeseq)])
+Skin_Citeseq[["HTO"]]<- CreateAssayObject(adt.count[, colnames(x = Skin_Citeseq)])
+
+Skin_Citeseq.hashtag <- CreateSeuratObject(counts = rna.counts)
+Skin_Citeseq.hashtag<- subset(Skin_Citeseq.hashtag, cells=all.cells)
+# Normalize RNA data with log normalization
+Skin_Citeseq.hashtag <- NormalizeData(Skin_Citeseq.hashtag)
+# Find and scale variable features
+Skin_Citeseq.hashtag <- FindVariableFeatures(Skin_Citeseq.hashtag, selection.method = "mean.var.plot")
+Skin_Citeseq.hashtag <- ScaleData(Skin_Citeseq.hashtag, features = VariableFeatures(Skin_Citeseq.hashtag))
+
+
+Skin_Citeseq.hashtag[["HTO"]] <- CreateAssayObject(counts = hto.count[,colnames(x=Skin_Citeseq.hashtag)])
+
+Skin_Citeseq.hashtag[["ADT"]]<- CreateAssayObject(counts = adt.count[,colnames(x=Skin_Citeseq.hashtag)])
+# Normalize HTO data, here we use centered log-ratio (CLR) transformation
+Skin_Citeseq.hashtag <- NormalizeData(Skin_Citeseq.hashtag, assay = "HTO", normalization.method = "CLR")
+Skin_Citeseq.hashtag<-NormalizeData(Skin_Citeseq.hashtag, assay="ADT",normalization.method = "CLR")
+
+Skin_Citeseq.hashtag <- HTODemux(Skin_Citeseq.hashtag, assay = "HTO", positive.quantile = 0.8)
+
+Skin_Citeseq.hashtag<-SetIdent(Skin_Citeseq.hashtag, value = Skin_Citeseq.hashtag@meta.data$HTO_maxID)
+Skin_Citeseq.hashtag<-subset(Skin_Citeseq.hashtag, idents=c("CT-subpop","SEneg-subpop"))
+Skin_Citeseq.hashtag<-SetIdent(Skin_Citeseq.hashtag, value = Skin_Citeseq.hashtag@meta.data$HTO_classification.global)
+Skin_Citeseq<-subset(Skin_Citeseq.hashtag, idents="Singlet")
+```
+
+```{r generating a UMAP and removing contaminants}
+Skin_Citeseq <- NormalizeData(Skin_Citeseq, normalization.method = "LogNormalize", scale.factor = 10000)
+all.genes <- rownames(Skin_Citeseq)
+Skin_Citeseq <- ScaleData(Skin_Citeseq, features = all.genes)
+
+Skin_Citeseq<-RunPCA(Skin_Citeseq, verbose = FALSE)
+##PCA numbers were determined by testing the effect of increasing dimention of the UMAP by multiple iteration, same for resolution
+Skin_Citeseq <- FindNeighbors(Skin_Citeseq, dims = 1:25)
+Skin_Citeseq <- FindClusters(Skin_Citeseq, resolution = 1)
+Skin_Citeseq <- RunUMAP(Skin_Citeseq, dims = 1:25)
+DimPlot(Skin_Citeseq, label=TRUE)
+##Cluster 14 and 13 are unknown and negative for all ADT markers. Cluster 5-11 contain CD3+ CD103+ cells, so T cell contaminants.
+
+Skin_Citeseq<-subset(Skin_Citeseq,idents=c("14","13","5","11"),invert=TRUE)
+
+##based on Cite-seq marker expression and Ccr7 for the RNA, sub-population were identified
+Skin_Citeseq<-RenameIdents(object=Skin_Citeseq, "0"="DC1","1"="CD11b-hi DC2","2"="CD11b-lo DC2","3"="CD11b-hi DC2","4"="CD11b-hi DC2","6"="DC1","7"="CD11b-hi DC2","8"="CD11b-hi DC2", "9"="DC1","10"="LC", "12"="LC","15"="CCR7+ DC")
+
+Skin_Citeseq$ID<-Skin_Citeseq@active.ident
+
+
+
+Figure1C<-DimPlot(Skin_Citeseq, label=TRUE,cols = c('CCR7+ DC'='#ED68ED','DC1'='#E68613','CD11b-lo DC2'='#F8766D','CD11b-hi DC2'='#0CB702','LC'='#00A9FF'))
+
+```
+```{r isolation CD301b pos cells}
+##we decided to use gene expression to split cells only to be able to use the same approach in datasets that did not contain Cite-seq. Similar results if the populations are split by protein expression
+Skin_Citeseq_DC2<-subset(Skin_Citeseq, ident=c("CD11b-lo DC2","CD11b-hi DC2"))
+Mgl2pos<-WhichCells(Skin_Citeseq_DC2, expression=Mgl2>2)
+Mgl2Bneg<-WhichCells(Skin_Citeseq_DC2, expression=Mgl2<=2)
+Skin_Citeseq_DC2$CD301b <- ifelse(colnames(Skin_Citeseq_DC2) %in% Mgl2pos, "Mgl2-pos", "Mgl2-neg")
+```
+
+```{r other figures code is as described below}
+##Figure 1D
+Figure1D<-FeaturePlot(Skin_Citeseq, features=c("Epcam","Itgam","Xcr1","Ccr7"))
+
+##Figure supp 1C
+FeaturePlot(Skin_Citeseq, features=c("EpCAM-ADT","CD11B-ADT","CD103-ADT"))
+
+##FIgure 1E
+Figure1E<-FeaturePlot(Skin_Citeseq, features=c("Mgl2","CD301B-ADT"), label=TRUE)
+Figures1ERidgeplot<-RidgePlot(Skin_Citeseq, features=c("CD301B-ADT","Mgl2"))
+
+
+##Figure 4C 
+
+##decide where the average will be done, this will be the two big columns of your data
+Skin_Citeseq_DC2<-SetIdent(Skin_Citeseq_DC2, value=Skin_Citeseq_DC2@meta.data$ID)
+## average the data on the ID column, but keeping as subcolumns the CD301b identity
+avgexpall_Skin_Citeseq_DC2<-AverageExpression(Skin_Citeseq_DC2, return.seurat = T, add.ident = "CD301b")
+DEG<-c("Cd209d", "Cd163","Fcrls", "Cd209e","Cd74","H2-Ab1","H2-Aa1","H2-Eb1","Mgl2")
+
+DoHeatmap(avgexpall_Skin_Citeseq_DC2, features=DEG, draw.lines = FALSE)+scale_fill_gradientn(colors = c("blue", "white", "red"))
+
+
+##table S1 
+Skin_Citeseq_DC2<-SetIdent(Skin_SE_DC2, value=Skin_SE_DC2@meta.data$CD301b)
+
+posvsnegnCD301B_TableS1_logFCthreshold0<-FindMarkers(Skin_Citeseq_DC2, ident.1="Mgl2-pos", ident.2="Mgl2-neg", assay="RNA",logfc.threshold = 0.01)
+
+
+##DotPlot for figure 4C
+Skin_Citeseq_DC2<-SetIdent(Skin_Citeseq_DC2, value=Skin_Citeseq_DC2@meta.data$ID)
+Skin_Citeseq_DC2_CD11bhi<-subset(Skin_Citeseq_DC2, idents="CD11b-hi DC2")
+Skin_Citeseq_DC2_CD11blo<-subset(Skin_Citeseq_DC2, idents="CD11b-hi DC2",invert=TRUE)
+Skin_Citeseq_DC2_CD11bhi<-SetIdent(Skin_Citeseq_DC2_CD11bhi, value=Skin_Citeseq_DC2_CD11bhi@meta.data$CD301b)
+
+DotPlotTheme=list(theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1,size=10),axis.title.x=element_blank(), axis.title.y=element_blank(),plot.title = element_text(hjust = 0.5, size=10),legend.text=element_text(size=5),legend.title=element_text(size=10)))
+
+DotPlot(Skin_Citeseq_DC2_CD11bhi, features=DEG, cols=c("black","grey"), split.by="CD301b")+DotPlotTheme
+Skin_Citeseq_DC2_CD11blo<-SetIdent(Skin_Citeseq_DC2_CD11blo, value=Skin_Citeseq_DC2_CD11blo@meta.data$CD301b)
+DotPlot(Skin_Citeseq_DC2_CD11blo, features=DEG, cols=c("black","grey"), split.by="CD301b")+DotPlotTheme
+##Dotplot was then added on heatmap with illustrator
+
+
+
+
+```
+```{r pantherfold analysis Fig 4B}
+
+
+##trying both at the same time
+pantherfold_curated_AW75_all<-read.csv("panther_analysis_AW75_all.csv", header=TRUE)
+
+
+#cleaning up parts of the matrix to remove unnecessary columns and to make it a dataframe
+rownames(pantherfold_curated_AW75_all)<-pantherfold_curated_AW75_all[,1]
+pantherfold_curated_AW75_all<-as.data.frame(pantherfold_curated_AW75_all)
+pantherfold_curated_AW75_all<-pantherfold_curated_AW75_all[,-c(1:5)]
+pantherfold_curated_AW75_all<-pantherfold_curated_AW75_all[,-2]
+
+
+#Changed column names 
+colnames(pantherfold_curated_AW75_all)<-c("Fold","FDR")
+AW75_panther_all<-ggplot(pantherfold_curated_AW75_all, aes((pantherfold_curated_AW75_all$Fold), y=reorder(rownames(pantherfold_curated_AW75_all), Fold))) +
+geom_point(color="red", mapping=aes(size=(-log10(pantherfold_curated_AW75_all$FDR))))+ scale_size(name="logFDR",range=c(4,12),breaks=c(4,8,12),labels=c(10^-4,10^-8,10^-12),guide="legend")+
+  theme_linedraw() +
+  theme(panel.background = element_rect(colour = "black"), axis.text = element_text(size = rel(1)), axis.title = element_text(size = rel(2.5)), legend.background = element_rect(colour = "black"))+xlab("Fold change")+ylab("")
+AW75_panther_all
+
+
+```
+
+```{r}
+
+
+```
+

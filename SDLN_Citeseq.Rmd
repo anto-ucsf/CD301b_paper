@@ -1,0 +1,202 @@
+---
+title: "SDLN_Citeseq"
+author: "Antonin Weckel"
+date: "6/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r packages needed}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(svglite)
+library(ggplot2)
+library(data.table)
+```
+
+```{r QC and extracting the singlets}
+
+##Accession number : 
+##SDLN.Citeseq.rds is the end product, SDLN.Citesq.data.rds is the raw seurat object
+
+## raw files matrices: "AW75_LN_barcodes.tsv.gz" "AW75_LN_features.tsv.gz" "AW75_LN_matrix.mtx.gz"
+
+
+
+##SDLN_Citeseq.data <- Read10X(data.dir = "YOUR LOCATION)
+
+##this is SDLN for D10 neonatal mouse. Three sorted population were pooled together and hashtagged, with also cite-seq. Uncolonized (CT-subpop), colonized but cells without bacteria (SEneg) and colonized cells loaded with bacterial antigen (SEpos). not difference were observed between SEneg and CTpop. so the pipeline focus on removing the SEpos populations, and getting only singlets. 
+
+##Citeseq contains EpCAM-ADT, CD11B-ADT, CD103-ADT, PDL-1-ADT, CD86-ADT, CD301B-ADT
+
+
+
+SDLN_Citeseq.data<- CreateSeuratObject(counts = SDLN_Citeseq.data$`Gene Expression`, project = "LN",assay="RNA", min.cells = 3, min.features = 200)
+
+
+SDLN_Citeseq<-SDLN_Citeseq.data
+
+SDLN_Citeseq[["percent.mt"]] <- PercentageFeatureSet(SDLN_Citeseq, pattern = "^mt-")
+
+# QC metrics were visualized to determine the proper thresholds
+SDLN_Citeseq<- subset(SDLN_Citeseq, subset = nFeature_RNA > 200 & nFeature_RNA < 5500 & percent.mt < 6)
+
+adt.counts.SDLN_Citeseq<- SDLN_Citeseq.data$`Antibody Capture`@Dimnames[[1]][1:6]
+adt.count.SDLN_Citeseq<-SDLN_Citeseq.data$`Antibody Capture`[adt.counts.SDLN_Citeseq,]
+hto.counts.SDLN_Citeseq<-SDLN_Citeseq.data$`Antibody Capture`@Dimnames[[1]][7:11]
+hto.count.SDLN_Citeseq<-SDLN_Citeseq.data$`Antibody Capture`[hto.counts.SDLN_Citeseq,]
+all.cells <- Reduce(intersect, list(colnames(SDLN_Citeseq), colnames(adt.count.SDLN_Citeseq), colnames(hto.count.SDLN_Citeseq)))
+                   
+SDLN_Citeseq <- subset(SDLN_Citeseq, cells = all.cells )
+```
+```{r normalization of RNA and HTO}
+# Normalize RNA data with log normalization
+SDLN_Citeseq <- NormalizeData(SDLN_Citeseq)
+# Find and scale variable features
+SDLN_Citeseq <- FindVariableFeatures(SDLN_Citeseq, selection.method = "mean.var.plot")
+SDLN_Citeseq <- ScaleData(SDLN_Citeseq, features = VariableFeatures(SDLN_Citeseq))
+
+
+# Add HTO and ADT data as a new assay independent from RNA
+SDLN_Citeseq[["HTO"]] <- CreateAssayObject(counts = hto.count.SDLN_Citeseq[,colnames(x=SDLN_Citeseq)])
+
+SDLN_Citeseq[["ADT"]]<- CreateAssayObject(counts = adt.count.SDLN_Citeseq[,colnames(x=SDLN_Citeseq)])
+# Normalize HTO data, here we use centered log-ratio (CLR) transformation
+SDLN_Citeseq <- NormalizeData(SDLN_Citeseq, assay = "HTO", normalization.method = "CLR")
+SDLN_Citeseq<-NormalizeData(SDLN_Citeseq, assay="ADT",normalization.method = "CLR")
+
+
+SDLN_Citeseq <- HTODemux(SDLN_Citeseq, assay = "HTO", positive.quantile = 0.985)
+
+# Extract the singlets
+Idents(SDLN_Citeseq) <- "HTO_classification.global"
+SDLN_Citeseq <- subset(SDLN_Citeseq, idents = "Singlet")
+
+
+```
+
+```{r}
+# Select the top 1000 most variable features
+SDLN_Citeseq <- FindVariableFeatures(SDLN_Citeseq, selection.method = "mean.var.plot")
+
+# Scaling RNA data, we only scale the variable features here for efficiency
+SDLN_Citeseq <- ScaleData(SDLN_Citeseq, features = VariableFeatures(SDLN_Citeseq))
+
+# Run PCA
+SDLN_Citeseq <- RunPCA(SDLN_Citeseq, features = VariableFeatures(SDLN_Citeseq))
+
+SDLN_Citeseq <- FindNeighbors(SDLN_Citeseq, reduction = "pca", dims = 1:20)
+SDLN_Citeseq <- FindClusters(SDLN_Citeseq, resolution = 0.8)
+SDLN_Citeseq <- RunUMAP(SDLN_Citeseq, dims = 1:20)
+```
+```{r cleaning the data to remove non migDC populations}
+
+SDLN_Citeseq_save<-SDLN_Citeseq
+SDLN_Citeseq<-SDLN_Citeseq_save
+FeaturePlot(SDLN_Citeseq, features=c("CD103-ADT","CD11B-ADT","EpCAM-ADT", "CD301B-ADT","Mgl2","PDL-1-ADT","CD86-ADT", "Ccr7","Cd3e"), label=TRUE)
+
+
+SDLN_Citeseq <- RenameIdents(object=SDLN_Citeseq, "0"="DC1","1"="CD11b-hi DC2","2"="LC","3"="DC1","4"="DC1","5"="CD11b-lo DC2","6"="resDC","7"="DC1","8"="Lymphoid", "9"="DC1","10"="DC1","11"="Lymphoid","12"="Lymphoid","13"="Lymphoid")
+
+
+##removing everything but the DC populations
+SDLN_Citeseq<-subset(SDLN_Citeseq, idents="Lymphoid", invert=TRUE)
+```
+
+```{r reclustering only the DC}
+SDLN_Citeseq<- FindVariableFeatures(SDLN_Citeseq, selection.method = "vst", nfeatures = 2000)
+
+all.genes <- rownames(SDLN_Citeseq)
+SDLN_Citeseq <- ScaleData(SDLN_Citeseq, features = all.genes)
+
+SDLN_Citeseq <- RunPCA(SDLN_Citeseq, features = VariableFeatures(object = SDLN_Citeseq))
+
+SDLN_Citeseq <- FindNeighbors(SDLN_Citeseq, dims = 1:25)
+SDLN_Citeseq <- FindClusters(SDLN_Citeseq, resolution = 1.2)
+SDLN_Citeseq <- RunUMAP(SDLN_Citeseq, dims = 1:25)
+ DimPlot(SDLN_Citeseq,reduction="umap",label=TRUE)
+
+FeaturePlot(SDLN_Citeseq, features=c("CD103-ADT","CD11B-ADT","EpCAM-ADT", "CD301B-ADT","Mgl2","PDL-1-ADT","CD86-ADT", "Ccr7","Cd3e"), label=TRUE)
+
+## cluster 9 is a cluster of resident DC, we will therefore anotate and remove that cluster
+
+
+SDLN_Citeseq <- RenameIdents(object=SDLN_Citeseq, "0"="DC1","1"="DC1","2"="DC1","3"="LC","4"="CD11b-lo DC2","5"="CD11b-hi DC2","6"="DC1","7"="CD11b-lo DC2","8"="LC", "9"="resDC","10"="CD11b-hi DC2","11"="LC","12"="DC1","13"="DC1","14"="DC1")
+
+SDLN_Citeseq<-subset(SDLN_Citeseq, ident="resDC",invert=TRUE)
+SDLN_Citeseq$ID<-SDLN_Citeseq@active.ident
+
+SDLN_Citeseq_save<-SDLN_Citeseq
+
+```
+
+```{r ID CD301b pos versus neg}
+DefaultAssay(SDLN_Citeseq) <- "ADT"
+
+
+LN_CD301Bpos<-WhichCells(SDLN_Citeseq, expression=`CD301B-ADT`>1.3)
+LN_CD301Bneg<-WhichCells(SDLN_Citeseq, expression=`CD301B-ADT`<=1.3)
+SDLN_Citeseq$CD301b <- ifelse(colnames(SDLN_Citeseq) %in% LN_CD301Bpos, "CD301B-pos", "CD301B-neg")
+
+DefaultAssay(SDLN_Citeseq) <- "RNA"
+
+```
+```{r removing the SEpos, SApos and SAneg from the data}
+SDLN_Citeseq<-SetIdent(SDLN_Citeseq, value = SDLN_Citeseq@meta.data$HTO_maxID)
+SDLN_Citeseq<-subset(SDLN_Citeseq, idents=c("CT-subpop","SEneg-subpop"))
+SDLN_Citeseq<-SetIdent(SDLN_Citeseq, value = SDLN_Citeseq@meta.data$ID)
+
+DimPlot(SDLN_Citeseq,reduction="umap",label=TRUE)
+
+```
+
+```{r working on DC2 only}
+SDLN_Citeseq_DC2<-subset(SDLN_Citeseq, ident=c("CD11b-lo DC2","CD11b-hi DC2"))
+
+
+DefaultAssay(SDLN_Citeseq_DC2) <- "ADT"
+LN_CD301Bpos_SDLN_Citeseq_DC2<-WhichCells(SDLN_Citeseq_DC2, expression=`CD301B-ADT`>1.3)
+LN_CD301Bneg_SDLN_Citeseq_DC2<-WhichCells(SDLN_Citeseq_DC2, expression=`CD301B-ADT`<=1.3)
+DefaultAssay(SDLN_Citeseq_DC2) <- "RNA"
+
+#Table S3
+CD301bposvsnegnSDLN_Citeseq<-FindMarkers(SDLN_Citeseq_DC2, ident.1=LN_CD301Bpos_SDLN_Citeseq_DC2, ident.2=LN_CD301Bneg_SDLN_Citeseq_DC2)
+
+
+```
+
+```{r}
+#Figure Supp 1E & F
+FeaturePlot(SDLN_Citeseq, feature=c("Epcam","Irf4","Irf8"))
+
+FeaturePlot(SDLN_Citeseq, feature=c("EpCAM-ADT","CD103-ADT","CD11B-ADT"))
+
+FeaturePlot(SDLN_Citeseq, feature=c("Mgl2","CD301B-ADT","Irf8"))
+
+
+
+##Fig supp1 D
+DimPlot(SDLN_Citeseq, reduction = "umap", order=c("DC1","CD11b-lo DC2","CD11b-hi DC2", "LC"),label=TRUE,cols = c('DC1'='#E68613','CD11b-lo DC2'='#F8766D','CD11b-hi DC2'='#0CB702','LC'='#00A9FF'))
+
+
+
+##Fig 5A
+
+Idents(SDLN_Citeseq_DC2)<-"CD301b"
+SDLN_Citeseq_DC2@active.ident<-factor(SDLN_Citeseq_DC2@active.ident,levels=c("CD301B-neg","CD301B-pos"))
+p1<-VlnPlot(SDLN_Citeseq_DC2, feature="Aldh1a2")
+Idents(SDLN_Citeseq)<-"ID"
+SDLN_Citeseq@active.ident<-factor(SDLN_Citeseq@active.ident,levels=c("CD11b-lo DC2","CD11b-hi DC2","DC1","LC"))
+p2<-VlnPlot(SDLN_Citeseq, feature="Aldh1a2")
+
+p5<-DoHeatmap(SDLN_Citeseq, features="Aldh1a2", assay="RNA")+scale_fill_gradientn(colors = c("blue", "white", "red"))
+p6<-DoHeatmap(SDLN_Citeseq_DC2, features="Aldh1a2", assay="RNA")+scale_fill_gradientn(colors = c("blue", "white", "red"))
+
+
+```
+```{r}
+```
+

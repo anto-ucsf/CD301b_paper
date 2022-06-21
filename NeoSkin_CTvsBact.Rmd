@@ -1,0 +1,134 @@
+---
+title: "NeoSkin_CTvsbact"
+author: "Antonin Weckel"
+date: "6/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(svglite)
+library(ggplot2)
+library(data.table)
+```
+
+```{r}
+
+
+##Accession number : 
+
+##NeoSkin_CTvsbact is the end product, NeoSkin_CTvsbact.data is the raw seurat object
+
+## raw files matrices: CT_neo: "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx"
+## raw files matrices: zsgreen_neg: "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx"
+## raw files matrices: zsgreen_pos: "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx"
+
+##NeoSkin_CTvsbact.data <- Read10X(data.dir = "FILE LOCATION")
+
+##this is skin from D10 neonatal mouse. CT_neo comes from an uncolonized mouse. Zsgreen_neg are dendritic cells without bacterial antigen from a colonized mouse with S.epidermidis-zsgreen and Zsgreen_pos the dendritic cells with bacterial antigens
+
+zsgreen_neg <- Read10X(data.dir = "FILES LOCATION")
+zsgreen_neg<- CreateSeuratObject(counts = zsgreen_neg, project = "AW137_zsgreen_neg", min.cells = 3, min.features = 200)
+zsgreen_pos <- Read10X(data.dir = "FILES LOCATION")
+zsgreen_pos<- CreateSeuratObject(counts = zsgreen_pos, project = "AW137_zsgreen_pos", min.cells = 3, min.features = 200)
+CT_neo<-Read10X(data.dir = "FILES LOCATION")
+CT_neo<- CreateSeuratObject(counts = CT_neo, project = "AW137_CT_neo", min.cells = 3, min.features = 200)
+
+##either assemble the zsgreen_neg, zsgreen_pos and CT_neo seurat objects and merge them as below or upload the raw merged seurat object NeoSkin_CTvsbact.data.rds
+
+NeoSkin_CTvsbact.data<-merge(x=zsgreen_neg, y=c(zsgreen_pos,CT_neo), add.cell.id=c("zsgreen_neg","zsgreen_pos","CT_neo"), project="AW137", merge.data = TRUE)
+
+##QC
+Neoskin_CTvsbact<-NeoSkin_CTvsbact.data
+NeoSkin_CTvsbact[["percent.mt"]] <- PercentageFeatureSet(NeoSkin_CTvsbact_save, pattern = "^mt-")
+NeoSkin_CTvsbact<- subset(NeoSkin_CTvsbact, subset = nFeature_RNA > 200 & nFeature_RNA < 5200 & percent.mt < 12)
+```
+
+```{r normalization}
+NeoSkin_CTvsbact <- NormalizeData(NeoSkin_CTvsbact, normalization.method = "LogNormalize", scale.factor = 10000)
+
+NeoSkin_CTvsbact<- FindVariableFeatures(NeoSkin_CTvsbact, selection.method = "vst", nfeatures = 2000)
+all.genes <- rownames(NeoSkin_CTvsbact)
+NeoSkin_CTvsbact <- ScaleData(NeoSkin_CTvsbact, features = all.genes)
+NeoSkin_CTvsbact <- RunPCA(NeoSkin_CTvsbact, features = VariableFeatures(object = NeoSkin_CTvsbact))
+NeoSkin_CTvsbact <- FindNeighbors(NeoSkin_CTvsbact, dims = 1:25)
+NeoSkin_CTvsbact <- FindClusters(NeoSkin_CTvsbact, resolution = 1)
+NeoSkin_CTvsbact <- RunUMAP(NeoSkin_CTvsbact, dims = 1:25)
+```
+```{r}
+NeoSkin_CTvsbact<-RenameIdents(object=NeoSkin_CTvsbact, "0"="DC1","1"="LC","2"="CD11b-hi DC2","3"="CD11b-hi DC2","4"="CD11b-lo DC2","5"="CD11b-hi DC2","6"="DC1","7"="CD11b-hi DC2","8"="CD11b-hi DC2", "9"="LC","10"="CD11b-hi DC2","11"="CD11b-hi DC2","12"="DC1","13"="CCR7+ DC","14"="NA","15"="NA","16"="NA","17"="NA","18"="LC","19"="DC1","20"="NA","21"="CD11b-hi DC2","22"="CD11b-hi DC2","23"="DC1","24"="NA","25"="NA","26"="NA","27"="NA","28"="CD11b-hi DC2","29"="NA")
+
+##remove all population NA
+NeoSkin_CTvsbact<-subset(NeoSkin_CTvsbact, ident="NA",invert=TRUE)
+NeoSkin_CTvsbact$ID<-NeoSkin_CTvsbact@active.ident
+
+DimPlot(NeoSkin_CTvsbact, label=TRUE,cols = c('CCR7+ DC'='#ED68ED','DC1'='#E68613','CD11b-lo DC2'='#F8766D','CD11b-hi DC2'='#0CB702','LC'='#00A9FF'))
+
+
+```
+
+
+
+
+```{r looking at CD301b+ cells}
+CD301Bpos<-WhichCells(NeoSkin_CTvsbact, expression=Mgl2>1)
+CD301Bneg<-WhichCells(NeoSkin_CTvsbact, expression=Mgl2<=1)
+
+NeoSkin_CTvsbact$CD301b<- ifelse(colnames(NeoSkin_CTvsbact) %in% CD301Bpos, "CD301b-pos", "CD301b-neg")
+```
+
+
+
+```{r splitting the object}
+NeoSkin_CTvsbact<-SetIdent(NeoSkin_CTvsbact, value = NeoSkin_CTvsbact@meta.data$orig.ident)
+NeoSkin_CT<-subset(NeoSkin_CTvsbact, ident="AW137_CT_neo")
+NeoSkin_colo<-subset(NeoSkin_CTvsbact, ident="AW137_CT_neo",invert=TRUE)
+
+
+```
+
+```{r only the DC2}
+NeoSkin_CT<-SetIdent(NeoSkin_CT, value = NeoSkin_CT@meta.data$ID)
+NeoSkin_colo<-SetIdent(NeoSkin_colo, value = NeoSkin_colo@meta.data$ID)
+NeoSkin_CTvsbact<-SetIdent(NeoSkin_CTvsbact, value = NeoSkin_CTvsbact@meta.data$ID)
+NeoSkin_CT_DC2<-subset(NeoSkin_CT, ident=c("CD11b-hi DC2","CD11b-lo DC2"))
+NeoSkin_colo_DC2<-subset(NeoSkin_colo, ident=c("CD11b-hi DC2","CD11b-lo DC2"))
+NeoSkin_CTvsbact_DC2<-subset(NeoSkin_CTvsbact, ident=c("CD11b-hi DC2","CD11b-lo DC2"))
+```
+```{r}
+
+  figure5A<-DimPlot(NeoSkin_colo, label=TRUE,cols = c('CCR7+ DC'='#ED68ED','DC1'='#E68613','CD11b-lo DC2'='#F8766D','CD11b-hi DC2'='#0CB702','LC'='#00A9FF'), split.by="orig.ident")
+
+
+NeoSkin_CTvsbact_DC2<-SetIdent(NeoSkin_CTvsbact_DC2, value = NeoSkin_CTvsbact_DC2@meta.data$CD301b)
+NeoSkin_CTvsbact_CD301bposDC2<-subset(NeoSkin_CTvsbact_DC2, ident="CD301b-pos")
+
+avgexp_NeoSkin_CTvsbact_DC2<-AverageExpression(NeoSkin_CTvsbact_CD301bposDC2, return.seurat = T, add.ident = 'orig.ident')
+
+
+
+
+##orders is CT, zsgreen neg, zsgreen pos
+Figure5B<-DoHeatmap(avgexp_NeoSkin_CTvsbact_DC2, features=c("Cd86","Cd80","Cd40","Tnsf4","Cd274","Fas","Socs1","Cd200","Pdcd1lg2","Il10","Il6","Il1b"), group.by = "orig.ident", draw.lines = FALSE)+scale_fill_gradientn(colors = c("blue", "white", "red"))
+```
+```{r CD301b pos  vs neg in DC2 in CT}
+CD301Bpos_CT<-WhichCells(NeoSkin_CT_DC2, expression=Mgl2>1)
+CD301Bneg_CT<-WhichCells(NeoSkin_CT_DC2, expression=Mgl2<=1)
+
+##Table S1
+CD301bposvsneg_DC2_CT<-FindMarkers(NeoSkin_CT_DC2, logfc.threshold = 0.01,ident.1=CD301Bpos_CT, ident.2=CD301Bneg_CT)
+
+
+```
+
+```{r}
+
+
+```
+

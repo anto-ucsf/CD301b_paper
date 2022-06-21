@@ -1,0 +1,119 @@
+---
+title: "Foreskin"
+author: "Antonin Weckel"
+date: "6/20/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r}
+
+```
+
+```{r}
+
+##Accession number : 
+##Foreskin.rds is the end product, Foreskin_merge2k.rds is an intermediary 
+
+## raw files matrices for Foreskin_zsgreen_neg.data: "AW128_Zsgreen_neg_barcodes.tsv.gz" "AW128_Zsgreen_neg_features.tsv.gz" "AW128_Zsgreen_neg_matrix.mtx.gz"
+
+## raw files matrices for Foreskin_zsgreen_pos.data: "AW128_Zsgreen_pos_barcodes.tsv.gz" "AW128_Zsgreen_pos_features.tsv.gz" "AW128_Zsgreen_pos_matrix.mtx.gz"
+
+##this is HLADR+ cells from human neonatal Foreskin colonized with S.epidermidis-zsgreen. Zsgreen_pos lane has sorted cells containing bacteria, Zsgreen_neg lane all other cells
+
+Foreskin_zsgreen_neg<- CreateSeuratObject(counts = Foreskin_zsgreen_neg.data, project = "zsgreen_neg", min.cells = 3, min.features = 200)
+
+Foreskin_zsgreen_pos<- CreateSeuratObject(counts = Foreskin_zsgreen_pos.data, project = "zsgreen_neg", min.cells = 3, min.features = 200)
+
+Foreskin_zsgreen_neg[["percent.mt"]] <- PercentageFeatureSet(Foreskin_zsgreen_neg, pattern = "^MT-")
+Foreskin_zsgreen_pos[["percent.mt"]]<- PercentageFeatureSet(Foreskin_zsgreen_pos, pattern = "^MT-")
+Foreskin_zsgreen_neg <- subset(x = Foreskin_zsgreen_neg, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 25)
+Foreskin_zsgreen_pos <- subset(x = Foreskin_zsgreen_pos, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 25)
+
+##we are going to merge zsgreen and pos but there are so many more zsgreen neg that I first downsample zsgreen neg to the same number as zsgreen pos cells (2372)
+Foreskin_zsgreen_neg2K<-subset(Foreskin_zsgreen_neg, downsample=2372)
+
+
+Foreskin <- merge(Foreskin_zsgreen_pos, y =Foreskin_zsgreen_neg2K, add.cell.ids = c("positive", "negative"), project = "AW128",merge.data = TRUE)
+
+
+
+```
+```{r UMAP}
+Foreskin<- FindVariableFeatures(Foreskin, selection.method = "vst", nfeatures = 2000)
+
+all.genes <- rownames(Foreskin)
+Foreskin <- ScaleData(Foreskin, features = all.genes)
+
+Foreskin <- RunPCA(Foreskin, features = VariableFeatures(object = Foreskin))
+Foreskin <- FindNeighbors(Foreskin, dims = 1:25)
+Foreskin <- FindClusters(Foreskin, resolution = 1.2)
+Foreskin <- RunUMAP(Foreskin, dims = 1:25)
+
+## I did not fix the seed for the downsample of zsgreen_neg, therefore to reproduce the figures, you need to import my combined data
+
+Foreskin <- readRDS("Foreskin_merge2k.rds")
+
+DimPlot(Foreskin, reduction="umap",label=TRUE)
+DotPlot(Foreskin,features="PTPRC")
+##non leukocytes: "20","19","18","5","13","10"
+Foreskin_save<-Foreskin
+Foreskin<-subset(Foreskin, idents=c("20","19","18","5","13","10"),invert=TRUE)
+
+
+```
+```{r cleaning up}
+Foreskin<-subset(Foreskin, idents=c("20","19","18","5","13","10"),invert=TRUE)
+Foreskin <- RenameIdents(object=Foreskin, "0"="Mo-derived","1"="Macrophage","2"="DC","3"="DC","4"="Macrophage","5"="Mo-derived","6"="Macrophage","7"="Mo-derived","8"="Macrophage", "9"="Mo-derived","11"="Mo-derived","12"="DC","14"="Macrophage","15"="Mo-derived", "16"="Macrophage", "17"="DC","21"="Mo-derived")
+
+##Figure 5D
+DimPlot(Foreskin, reduction = "umap",label=TRUE)
+
+
+```
+
+```{r working on DC only and reclustering}
+
+Foreskin_DCsubset<-subset(Foreskin, ident=c("DC"))
+
+
+all.genes <- rownames(Foreskin_DCsubset)
+Foreskin_DCsubset <- ScaleData(Foreskin_DCsubset, features = all.genes)
+
+Foreskin_DCsubset <- RunPCA(Foreskin_DCsubset, features = VariableFeatures(object = Foreskin_DCsubset))
+Foreskin_DCsubset <- FindNeighbors(Foreskin_DCsubset, dims = 1:25)
+Foreskin_DCsubset <- FindClusters(Foreskin_DCsubset, resolution = 1.2)
+Foreskin_DCsubset <- RunUMAP(Foreskin_DCsubset, dims = 1:25)
+
+DimPlot(Foreskin_DCsubset,  reduction = "umap", label=TRUE, split.by="zsgreen")
+
+## using classical markers I identify some non-DC cells and mast cells in the DC, so I remove those cells
+
+DotPlot(Foreskin_DCsubset, features=c("HLA-DQA1","XCR1","CLEC9A","IRF8","CLEC10A","CD1E","CD1C","FCER1A","CCR7","BIRC3","MARCKSL1","CD1A", "CD207","CST7"))+DotPlotTheme
+Foreskin_DCsubset <- RenameIdents(object=Foreskin_DCsubset, "0"="CCR7+ DC2","1"="DC2","2"="DC2","3"="DC2","4"="DC2","5"="Non-DC","6"="DC2","7"="DC1","8"="LC", "9"="Mast cells")
+
+
+
+Foreskin_DCsubset<- subset(Foreskin_DCsubset, idents=c("Mast cells","Non-DC"), invert=TRUE)
+Foreskin_DCsubset_DC2<-subset(Foreskin_DCsubset, idents=c("CCR7+ DC2","DC2"))
+
+Foreskin_DCsubset_DC2<-SetIdent(Foreskin_DCsubset_DC2, value=Foreskin_DCsubset_DC2@meta.data$orig.ident)
+avg_Foreskin_DCsubset_DC2<-AverageExpression(Foreskin_DCsubset_DC2,return.seurat = T)
+DoHeatmap(avg_Foreskin_DCsubset_DC2,features=all_sufficient_markers_noCD83noCD86, draw.lines = FALSE, slot="data")+ scale_fill_gradientn(colors = c("blue", "white", "red"))+ggtitle("scale.data")
+
+
+```
+
+```{r}
+
+
+```
+
