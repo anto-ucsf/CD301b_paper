@@ -21,13 +21,15 @@ library(data.table)
 ```{r}
 
 
-##Accession number : 
+
+##Accession number : GSE206891
+
 
 ##NeoSkin_CTvsbact is the end product, NeoSkin_CTvsbact.data is the raw seurat object
 
-## raw files matrices: CT_neo: "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx"
-## raw files matrices: zsgreen_neg: "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx"
-## raw files matrices: zsgreen_pos: "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx"
+## raw files matrices: CT_neo (GSM6266593): "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx" "AW137_CT_neo_matrix.mtx"
+## raw files matrices: zsgreen_neg (GSM6266594): "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx" "AW137_zsgreen_neg_matrix.mtx"
+## raw files matrices: zsgreen_pos (GSM6266595): "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx" "AW137_zsgreen_pos_matrix.mtx"
 
 ##NeoSkin_CTvsbact.data <- Read10X(data.dir = "FILE LOCATION")
 
