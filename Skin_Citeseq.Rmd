@@ -21,11 +21,13 @@ library(data.table)
 
 
 ```{r}
-##Accession number : 
+##Accession number : GSE206892      
 ##Skin.Citeseq.rds is the end product, Skin.Citesq.data.rds is the raw seurat object
 
-## raw files matrices: "Skin_SE_barcodes.tsv.gz" "Skin_SE_features.tsv.gz" "Skin_SE_matrix.mtx.gz"
+## raw files matrices (GSM6266596) "Skin_SE_barcodes.tsv.gz" "Skin_SE_features.tsv.gz" "Skin_SE_matrix.mtx.gz"
 
+##HTO: GSM6266600
+## ADT: GSM6266598
 
 ##Skin_Citeseq.data <- Read10X(data.dir = "FILE LOCATION")
 
