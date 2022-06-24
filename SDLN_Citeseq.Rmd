@@ -19,10 +19,13 @@ library(data.table)
 
 ```{r QC and extracting the singlets}
 
-##Accession number : 
-##SDLN.Citeseq.rds is the end product, SDLN.Citesq.data.rds is the raw seurat object
+##Accession number : GSE206892
+##SDLN.Citeseq.rds is the end product, SDLN.Citeseq.data.rds is the raw seurat object
 
-## raw files matrices: "AW75_LN_barcodes.tsv.gz" "AW75_LN_features.tsv.gz" "AW75_LN_matrix.mtx.gz"
+## raw files matrices (GSM6266597) "AW75_LN_barcodes.tsv.gz" "AW75_LN_features.tsv.gz" "AW75_LN_matrix.mtx.gz"
+
+##HTO: GSM6266601
+##ADT: GSM6266599
 
 
 
