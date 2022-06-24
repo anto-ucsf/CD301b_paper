@@ -20,12 +20,12 @@ When you click the **Knit** button a document will be generated that includes bo
 
 ```{r}
 
-##Accession number : 
+##Accession number : GSE206893      
 ##Foreskin.rds is the end product, Foreskin_merge2k.rds is an intermediary 
 
-## raw files matrices for Foreskin_zsgreen_neg.data: "AW128_Zsgreen_neg_barcodes.tsv.gz" "AW128_Zsgreen_neg_features.tsv.gz" "AW128_Zsgreen_neg_matrix.mtx.gz"
+## raw files matrices for Foreskin_zsgreen_neg.data (GSM6266602): "AW128_Zsgreen_neg_barcodes.tsv.gz" "AW128_Zsgreen_neg_features.tsv.gz" "AW128_Zsgreen_neg_matrix.mtx.gz"
 
-## raw files matrices for Foreskin_zsgreen_pos.data: "AW128_Zsgreen_pos_barcodes.tsv.gz" "AW128_Zsgreen_pos_features.tsv.gz" "AW128_Zsgreen_pos_matrix.mtx.gz"
+## raw files matrices for Foreskin_zsgreen_pos.data (GSM6266603): "AW128_Zsgreen_pos_barcodes.tsv.gz" "AW128_Zsgreen_pos_features.tsv.gz" "AW128_Zsgreen_pos_matrix.mtx.gz"
 
 ##this is HLADR+ cells from human neonatal Foreskin colonized with S.epidermidis-zsgreen. Zsgreen_pos lane has sorted cells containing bacteria, Zsgreen_neg lane all other cells
 
