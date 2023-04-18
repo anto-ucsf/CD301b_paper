@@ -1,0 +1,153 @@
+---
+title: "Adult SCT transform"
+author: "me"
+date: "10/14/2021"
+output: html_document
+---
+This is the is the code used in the paper "Long-term tolerance to skin commensals is established neonatally through a specialized dendritic cell subgroup" by Antonin Weckel.
+For any issue, please directly contact the corresponding author. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sctransform)
+library(Seurat)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+#Adult skin dataset can be found under the GEO: GSE217891, GSM6729492
+Adult <- Read10X(data.dir = "FILE LOCATION")
+Adult<- CreateSeuratObject(counts = Adult, project = "AW137_Adult", min.cells = 3, min.features = 200)
+Adult[["percent.mt"]] <- PercentageFeatureSet(Adult, pattern = "^mt-")
+Adult<- subset(Adult, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 12)
+Adult$age<-"Adult"
+
+##NEonate data can be found under the accession number GSE206891, #GSM6266593
+Neonate <- Read10X(data.dir = 'File LOCATION')
+Neonate<- CreateSeuratObject(counts = Neonate, project = "AW137_Neonate", min.cells = 3, min.features = 200)
+Neonate[["percent.mt"]] <- PercentageFeatureSet(Neonate, pattern = "^mt-")
+
+Neonate<- subset(Neonate, subset = nFeature_RNA > 200 & nFeature_RNA < 7000 & percent.mt < 12)
+Neonate$age<-"Neonate"
+
+
+##### SCT transforma and integrate data set
+AdultNeo_list<-c(Adult,Neonate)
+AdultNeo_list <- lapply(X = AdultNeo_list, FUN = SCTransform)
+features <- SelectIntegrationFeatures(object.list = AdultNeo_list, nfeatures = 3000)
+AdultNeo_list <- PrepSCTIntegration(object.list = AdultNeo_list, anchor.features = features)
+
+skin.anchors <- FindIntegrationAnchors(object.list = AdultNeo_list, normalization.method = "SCT",
+    anchor.features = features)
+skin.anchors.sct <- IntegrateData(anchorset = skin.anchors, normalization.method = "SCT")
+
+skin.anchors.sct <- RunPCA(skin.anchors.sct, verbose = FALSE)
+skin.anchors.sct <- RunUMAP(skin.anchors.sct, reduction = "pca", dims = 1:30)
+
+
+```
+
+```{r clustering with tested values}
+AdultNeoSkin <- FindNeighbors(AdultNeoSkin, dims = 1:35)
+AdultNeoSkin <- FindClusters(AdultNeoSkin, resolution = 1)
+AdultNeoSkin <- RunUMAP(AdultNeoSkin, dims = 1:35)
+DimPlot(AdultNeoSkin,reduction="umap",label=TRUE)
+## the file can be found under AdultNeoSkin_clustered.rds
+
+```
+
+```{r subset DC}
+##we remove any cells that do not match expected DC signatures
+AdultNeoSkin_DC<-subset(AdultNeoSkin, idents=c(25,17,22,13,19,30,20,28,23,27),invert=TRUE)
+DimPlot(AdultNeoSkin_DC,reduction="umap",label=TRUE)
+
+```
+```{r final clustering DC}
+AdultNeoSkin_DC <- FindNeighbors(AdultNeoSkin_DC, dims = 1:35)
+AdultNeoSkin_DC <- FindClusters(AdultNeoSkin_DC, resolution = 1.2)
+AdultNeoSkin_DC <- RunUMAP(AdultNeoSkin_DC, dims = 1:35)
+DimPlot(AdultNeoSkin_DC,reduction="umap",label=TRUE)
+DimPlot(AdultNeoSkin_DC,reduction="umap",label=TRUE, split.by="age")
+##the final object with only DC and clustering can be found under AdultNeoSkin_DC.rds
+
+```
+
+```{r figures of the paper}
+AdultNeoSkin_DC_paper<-RenameIdents(object=AdultNeoSkin_DC, "0"="DC1","1"="LC","2"="CD11b-hi DC2","3"="CD11b-hi DC2","4"="CD11b-hi DC2","5"="CD11b-hi DC2","6"="CD11b-hi DC2","7"="CD11b-hi DC2","8"="CD11b-lo DC2", "9"="DC1","10"="CD11b-hi DC2","11"="CD11b-hi DC2","12"="LC","13"="CD11b-hi DC2","14"="CCR7+ DC","15"="CD11b-hi DC2","16"="DC1","17"="CD11b-hi DC2","18"="CD11b-lo DC2","19"="DC1","20"="CD11b-hi DC2","21"="DC1","22"="LC","23"="CD11b-hi DC2")
+
+AdultNeoSkin_DC_paper$ID<-AdultNeoSkin_DC_paper@active.ident
+
+AdultNeoSkin_DC_paper_dwnspl<-AdultNeoSkin_DC_paper
+set.seed(111)
+AdultNeoSkin_DC_paper_dwnspl<-SetIdent(AdultNeoSkin_DC_paper_dwnspl, value = AdultNeoSkin_DC_paper_dwnspl@meta.data$age)
+
+AdultNeoSkin_DC_paper_dwnspl<-subset(x=AdultNeoSkin_DC_paper_dwnspl, downsample = 3983)
+##file can be found as AdultNeoSkin_DC_paper_dwnspl.rds and AdultNeoSkin_DC_paper.rds
+
+Idents(AdultNeoSkin_DC_paper_dwnspl)<-"ID"
+
+Figure_6A<-DimPlot(AdultNeoSkin_DC_paper_dwnspl, label=TRUE,cols = c('CCR7+ DC'='#ED68ED','DC1'='#E68613','CD11b-lo DC2'='#F8766D','CD11b-hi DC2'='#0CB702','LC'='#00A9FF'), split.by="age")
+ 
+```
+
+```{r Figure 6 heatmap}
+
+AdultNeoSkin_DC_paper_DC2<-subset(AdultNeoSkin_DC_paper, ident=c("CD11b-hi DC2", "CD11b-lo DC2"))
+
+## identifying cells within a criteria
+DefaultAssay(AdultNeoSkin_DC_paper_DC2) <- "SCT"
+AdultNeoSkin_DC_paper_DC2_CD301Bpos<-WhichCells(AdultNeoSkin_DC_paper_DC2, expression=Mgl2>0.5)
+DefaultAssay(AdultNeoSkin_nDC2_downsampled) <- "SCT"
+AdultNeoSkin_DC_paper_DC2_CD301Bneg<-WhichCells(AdultNeoSkin_DC_paper_DC2, expression=Mgl2<=0.5)
+
+## allocate identitites in the Seurat object according to the expression level of CD301b
+AdultNeoSkin_DC_paper_DC2$CD301B <- ifelse(colnames(AdultNeoSkin_DC_paper_DC2) %in% AdultNeoSkin_DC_paper_DC2_CD301Bpos, "CD301B-pos", "CD301b-neg")
+
+##getting the cells that are positive in Adults and neonates
+AdultCD301bpos<-subset(x=AdultNeoSkin_DC_paper_DC2, subset=(age=="Adult" & CD301B=="CD301B-pos"))
+NeonateCD301bpos<-subset(x=AdultNeoSkin_DC_paper_DC2, subset=(age=="Neonate" & CD301B=="CD301B-pos"))
+
+##getting the cells that are negative in Adults and neonates
+AdultCD301bneg<-subset(x=AdultNeoSkin_DC_paper_DC2, subset=(age=="Adult" & CD301B=="CD301b-neg"))
+NeonateCD301bneg<-subset(x=AdultNeoSkin_DC_paper_DC2, subset=(age=="Neonate" & CD301B=="CD301b-neg"))
+
+
+## getting the list of the names of those cells
+list_AdultCD301Bpos<-colnames(AdultCD301bpos)
+list_NeonateCD301Bpos<-colnames(NeonateCD301bpos)
+list_AdultCD301Bneg<-colnames(AdultCD301bneg)
+list_NeonateCD301Bneg<-colnames(NeonateCD301bneg)
+
+##decide where the average will be done, this will be the two big columns of your data
+DefaultAssay(AdultNeoSkin_DC_paper_DC2) <- "SCT"
+AdultNeoSkin_DC_paper_DC2<-SetIdent(AdultNeoSkin_DC_paper_DC2, value=AdultNeoSkin_DC_paper_DC2@meta.data$age)
+## average the data on the ID column, but keeping as subcolumns the CD301b identity
+avgexpall_AdultNeoSkin_DC_paper_DC2<-AverageExpression(AdultNeoSkin_DC_paper_DC2, return.seurat = T, add.ident = "CD301B")
+DEG<-c("Cd209d", "Cd163","Fcrls", "Cd209e","Cd74","H2-Ab1","H2-Aa1","H2-Eb1","Mgl2")
+
+Figure6G_heatmap<-DoHeatmap(avgexpall_AdultNeoSkin_DC_paper_DC2, features=DEG, draw.lines = FALSE)+scale_fill_gradientn(colors = c("blue", "white", "red"))
+
+Figure6G_dotplot<-DotPlot(AdultNeoSkin_DC_paper_DC2, features=DEG, split.by="age", group.by = "CD301B")
+
+##combine heatmap and dot plot on adobe illustrator to generate figure6G
+```
+```{r csv files to generate Figure 6H and 6I}
+
+## comparing CD301B pos cells Neonate vs Adults
+NeonatevsAdult_CD310Bpos_markers<-FindMarkers(AdultNeoSkin_DC_paper_DC2, ident.1= list_NeonateCD301Bpos, ident.2=list_AdultCD301Bpos, assay = "SCT",recorrect_umi=FALSE)
+write.csv(NeonatevsAdult_CD310Bpos_markers,"/mnt/DATA/scharschmidt_lab/AW_137_mouse_scRNAseq/AW137_Adultnew/NeonatevsAdult_CD310Bpos_markers_test.csv")
+
+##NEonate CD301b+ vs neg
+Neonate_CD301bposVSneg_markers<-FindMarkers(AdultNeoSkin_nDC2_downsampled, ident.1= list_NeonateCD301Bpos, ident.2=list_NeonateCD301Bneg, assay = "SCT",recorrect_umi=FALSE)
+write.csv(Neonate_CD301bposVSneg_markers,"/mnt/DATA/scharschmidt_lab/AW_137_mouse_scRNAseq/AW137_Adultnew/Neonate_CD301bposVSneg_markers.csv")
+
+
+##Adult CD301b+ vs neg
+Adult_CD301bposVSneg_markers<-FindMarkers(AdultNeoSkin_nDC2_downsampled, ident.1= list_AdultCD301Bpos, ident.2=list_AdultCD301Bneg, assay = "SCT",recorrect_umi=FALSE)
+write.csv(Adult_CD301bposVSneg_markers,"/mnt/DATA/scharschmidt_lab/AW_137_mouse_scRNAseq/AW137_Adultnew/Adult_CD301bposVSneg_markers.csv")
+```
+
