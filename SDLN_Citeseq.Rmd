@@ -36,11 +36,10 @@ library(data.table)
 ##Citeseq contains EpCAM-ADT, CD11B-ADT, CD103-ADT, PDL-1-ADT, CD86-ADT, CD301B-ADT
 
 
-
-SDLN_Citeseq.data<- CreateSeuratObject(counts = SDLN_Citeseq.data$`Gene Expression`, project = "LN",assay="RNA", min.cells = 3, min.features = 200)
-
-
 SDLN_Citeseq<-SDLN_Citeseq.data
+
+SDLN_Citeseq<- CreateSeuratObject(counts = SDLN_Citeseq.data$`Gene Expression`, project = "LN",assay="RNA", min.cells = 3, min.features = 200)
+
 
 SDLN_Citeseq[["percent.mt"]] <- PercentageFeatureSet(SDLN_Citeseq, pattern = "^mt-")
 
