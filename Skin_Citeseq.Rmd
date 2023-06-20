@@ -37,13 +37,12 @@ library(data.table)
 
 
 rna.counts<-Skin_Citeseq.data$`Gene Expression`
-Skin_Citeseq.data<- CreateSeuratObject(counts =Skin_Citeseq.data$`Gene Expression`, project = "Skin_Citeseq",assay="RNA", min.cells = 3, min.features = 200)
+Skin_Citeseq<- CreateSeuratObject(counts =Skin_Citeseq.data$`Gene Expression`, project = "Skin_Citeseq",assay="RNA", min.cells = 3, min.features = 200)
 
 ##alternatively, load the rds object directly
 ## Skin_Citeseq.data<-readRDS ("YOUR LOCATION")
 
-Skin_Citeseq<-Skin_Citeseq.data
-Skin_Citeseq[["percent.mt"]] <- PercentageFeatureSet(Skin_Citeseq.data, pattern = "^mt-")
+Skin_Citeseq[["percent.mt"]] <- PercentageFeatureSet(Skin_Citeseq, pattern = "^mt-")
 
 ##QC paramters were determined by looking at features, percent.met distribution etc...
 Skin_Citeseq<- subset(Skin_Citeseq, subset = nFeature_RNA > 200 & nFeature_RNA < 5500 & percent.mt < 6)
